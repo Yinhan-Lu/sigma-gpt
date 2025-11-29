@@ -151,7 +151,10 @@ print("Before data loading...")
 # print(f"Current memory usage: {virtual_memory().used / (1024 ** 3):.2f} GB")
 
 # poor man's data loader
-data_dir = os.path.join("nanoGPT/data", dataset)
+# Check data/ first (for new datasets), fallback to nanoGPT/data/ (for submodule datasets)
+data_dir = os.path.join("data", dataset)
+if not os.path.exists(data_dir):
+    data_dir = os.path.join("nanoGPT/data", dataset)
 train_data = np.memmap(os.path.join(data_dir, "train.bin"), dtype=np.uint16, mode="r")
 val_data = np.memmap(os.path.join(data_dir, "val.bin"), dtype=np.uint16, mode="r")
 print("Data Loaded...")
