@@ -1,0 +1,23 @@
+# Copyright © <2023> Idiap Research Institute <contact@idiap.ch>
+#
+# SPDX-FileContributor: Arnaud Pannatier <arnaud.pannatier@idiap.ch>
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+# Modified for Apple Silicon MPS (Metal Performance Shaders) support
+name: sigma-gpt-mps
+dependencies:
+  - python=3.10
+  - pip
+  - numpy<2 # Compatibility requirement for PyTorch 2.1
+  - pytorch::pytorch=2.1 # BSD-3-Clause, https://pytorch.org/ - MPS support improved in 2.1+
+  - pytorch::torchvision # BSD-3-Clause, https://pytorch.org/vision/
+  # Note: No pytorch-cuda or cuda packages needed for MPS
+  - black # MIT, https://github.com/psf/black
+  - tqdm # MIT, https://github.com/tqdm/tqdm
+  - matplotlib # PSF-based, https://matplotlib.org/
+  - pandas # BSD-3-Clause, https://pandas.pydata.org/
+  - pre-commit # MIT, https://pre-commit.com/
+  - conda-forge::einops # MIT, https://github.com/arogozhnikov/einops
+  - conda-forge::pytest # MIT, https://docs.pytest.org/en/latest/
+  - cairo # LGPL-2.1, https://www.cairographics.org/ picoclvr dependency
+  - conda-forge::tiktoken # MIT https://github.com/openai/tiktoken nanoGPT dependency

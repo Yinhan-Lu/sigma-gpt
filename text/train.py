@@ -22,6 +22,7 @@ $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123
 $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
 (If your cluster does not have Infiniband interconnect prepend NCCL_IB_DISABLE=1)
 """
+import csv
 import math
 import os
 import pickle
@@ -191,6 +192,8 @@ def get_batch(split, order_type=order_type, it=None):
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
 iter_num = 0
 best_val_loss = 1e9
+loss_history = []  # 保存loss历史
+loss_csv_path = os.path.join(out_dir, "loss_history.csv")
 
 # attempt to derive vocab_size from the dataset
 meta_path = os.path.join(data_dir, "meta.pkl")
@@ -247,6 +250,15 @@ elif init_from == "resume":
     model.load_state_dict(state_dict)
     iter_num = checkpoint["iter_num"]
     best_val_loss = checkpoint["best_val_loss"]
+    # 加载已有的loss历史
+    if os.path.exists(loss_csv_path):
+        with open(loss_csv_path, "r") as f:
+            reader = csv.DictReader(f)
+            loss_history = [
+                {k: int(v) if k == "iter" else float(v) for k, v in row.items()}
+                for row in reader
+            ]
+        print(f"Loaded {len(loss_history)} loss history records from {loss_csv_path}")
 
     print("done loading checkpoint")
     # print(f"Current memory usage: {virtual_memory().used / (1024 ** 3):.2f} GB")
@@ -362,6 +374,20 @@ while True:
             f"step {iter_num}: train loss {losses['train']:.4f},"
             f" val loss {losses['val']:.4f} val_left-to-right {losses['val_left-to-right']:.4f}"
         )
+        # 记录loss历史并写入CSV
+        loss_record = {
+            "iter": iter_num,
+            "train_loss": float(losses["train"]),
+            "val_loss": float(losses["val"]),
+            "val_left_to_right": float(losses["val_left-to-right"]),
+        }
+        loss_history.append(loss_record)
+        csv_exists = os.path.exists(loss_csv_path)
+        with open(loss_csv_path, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["iter", "train_loss", "val_loss", "val_left_to_right"])
+            if not csv_exists:
+                writer.writeheader()
+            writer.writerow(loss_record)
         if wandb_log:
             wandb.log(
                 {
