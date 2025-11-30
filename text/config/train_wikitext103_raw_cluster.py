@@ -1,6 +1,6 @@
 # WikiText-103 Raw 训练配置 - 集群版 (A100)
 out_dir = 'out-wikitext103-raw'
-eval_interval = 500
+eval_interval = 100
 eval_iters = 200
 log_interval = 10
 

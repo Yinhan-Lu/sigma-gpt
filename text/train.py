@@ -202,14 +202,18 @@ def get_batch(split, order_type=order_type, it=None):
 iter_num = 0
 best_val_loss = 1e9
 early_stopping_counter = 0  # early stopping计数器
-loss_history = []  # 保存loss历史
+loss_history = []  # 保存loss历史 (eval时)
+train_loss_history = []  # 保存train loss历史 (每log_interval)
 loss_csv_path = os.path.join(out_dir, "loss_history.csv")
+train_loss_csv_path = os.path.join(out_dir, "train_loss_history.csv")
 plot_path = os.path.join(out_dir, "training_curve.png")
 
 # 新实验时清除旧的 loss 记录
-if init_from == "scratch" and os.path.exists(loss_csv_path):
-    os.remove(loss_csv_path)
-    print(f"Removed old loss history: {loss_csv_path}")
+if init_from == "scratch":
+    for p in [loss_csv_path, train_loss_csv_path]:
+        if os.path.exists(p):
+            os.remove(p)
+            print(f"Removed old loss history: {p}")
 
 # attempt to derive vocab_size from the dataset
 meta_path = os.path.join(data_dir, "meta.pkl")
@@ -406,16 +410,23 @@ while True:
             writer.writerow(loss_record)
 
         # 画图并保存
-        if len(loss_history) > 1:
-            iters = [r["iter"] for r in loss_history]
-            train_losses = [r["train_loss"] for r in loss_history]
-            val_losses = [r["val_loss"] for r in loss_history]
-            val_l2r_losses = [r["val_left_to_right"] for r in loss_history]
+        if len(loss_history) > 1 or len(train_loss_history) > 1:
+            plt.figure(figsize=(12, 6))
 
-            plt.figure(figsize=(10, 6))
-            plt.plot(iters, train_losses, 'b-', label='Train Loss', alpha=0.7)
-            plt.plot(iters, val_losses, 'r-o', label='Val Loss')
-            plt.plot(iters, val_l2r_losses, 'g--', label='Val L2R Loss', alpha=0.7)
+            # 使用更密集的 train loss 数据
+            if len(train_loss_history) > 1:
+                train_iters = [r["iter"] for r in train_loss_history]
+                train_losses = [r["train_loss"] for r in train_loss_history]
+                plt.plot(train_iters, train_losses, 'b-', label='Train Loss', alpha=0.5, linewidth=0.8)
+
+            # Val loss (eval 时记录)
+            if len(loss_history) > 1:
+                val_iters = [r["iter"] for r in loss_history]
+                val_losses = [r["val_loss"] for r in loss_history]
+                val_l2r_losses = [r["val_left_to_right"] for r in loss_history]
+                plt.plot(val_iters, val_losses, 'r-o', label='Val Loss', markersize=4)
+                plt.plot(val_iters, val_l2r_losses, 'g--s', label='Val L2R Loss', alpha=0.7, markersize=3)
+
             plt.xlabel('Iteration')
             plt.ylabel('Loss')
             plt.title(f'Training Progress - Best Val: {best_val_loss:.4f}')
@@ -515,6 +526,15 @@ while True:
             f" mfu {running_mfu:.2%}, training {iter_num/max_iters:.2%}, lr {lr:.1e}",
             flush=True,
         )
+        # 记录 train loss 到 CSV (每 log_interval 步)
+        train_record = {"iter": iter_num, "train_loss": lossf, "lr": lr}
+        train_loss_history.append(train_record)
+        csv_exists = os.path.exists(train_loss_csv_path)
+        with open(train_loss_csv_path, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["iter", "train_loss", "lr"])
+            if not csv_exists:
+                writer.writeheader()
+            writer.writerow(train_record)
     iter_num += 1
     local_iter_num += 1
 
