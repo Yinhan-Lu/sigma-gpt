@@ -32,4 +32,8 @@ lr_decay_iters = 2500
 min_lr = 5e-5
 warmup_iters = 200
 
+# Early stopping: val loss 连续5次eval没明显下降就停止
+early_stopping_patience = 5
+early_stopping_min_delta = 0.01  # 最小改善阈值
+
 compile = True  # A100 支持 torch.compile

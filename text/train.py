@@ -29,6 +29,9 @@ import pickle
 import time
 from contextlib import nullcontext
 
+import matplotlib
+matplotlib.use('Agg')  # 无GUI后端
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
@@ -78,6 +81,9 @@ decay_lr = True  # whether to decay the learning rate
 warmup_iters = 2000  # how many steps to warm up for
 lr_decay_iters = 600000  # should be ~= max_iters per Chinchilla
 min_lr = 6e-5  # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
+# early stopping settings
+early_stopping_patience = 5  # 连续多少次eval没有改善就停止 (0=禁用)
+early_stopping_min_delta = 0.001  # 最小改善阈值
 # DDP settings
 backend = "nccl"  # 'nccl', 'gloo', etc.
 # system
@@ -195,8 +201,10 @@ def get_batch(split, order_type=order_type, it=None):
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
 iter_num = 0
 best_val_loss = 1e9
+early_stopping_counter = 0  # early stopping计数器
 loss_history = []  # 保存loss历史
 loss_csv_path = os.path.join(out_dir, "loss_history.csv")
+plot_path = os.path.join(out_dir, "training_curve.png")
 
 # attempt to derive vocab_size from the dataset
 meta_path = os.path.join(data_dir, "meta.pkl")
@@ -391,6 +399,39 @@ while True:
             if not csv_exists:
                 writer.writeheader()
             writer.writerow(loss_record)
+
+        # 画图并保存
+        if len(loss_history) > 1:
+            iters = [r["iter"] for r in loss_history]
+            train_losses = [r["train_loss"] for r in loss_history]
+            val_losses = [r["val_loss"] for r in loss_history]
+            val_l2r_losses = [r["val_left_to_right"] for r in loss_history]
+
+            plt.figure(figsize=(10, 6))
+            plt.plot(iters, train_losses, 'b-', label='Train Loss', alpha=0.7)
+            plt.plot(iters, val_losses, 'r-o', label='Val Loss')
+            plt.plot(iters, val_l2r_losses, 'g--', label='Val L2R Loss', alpha=0.7)
+            plt.xlabel('Iteration')
+            plt.ylabel('Loss')
+            plt.title(f'Training Progress - Best Val: {best_val_loss:.4f}')
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+            plt.close()
+            print(f"Plot saved to {plot_path}")
+
+        # Early stopping检查
+        if early_stopping_patience > 0:
+            if losses["val"] < best_val_loss - early_stopping_min_delta:
+                early_stopping_counter = 0  # 有改善，重置计数器
+            else:
+                early_stopping_counter += 1
+                print(f"Early stopping counter: {early_stopping_counter}/{early_stopping_patience}")
+                if early_stopping_counter >= early_stopping_patience:
+                    print(f"Early stopping triggered! Val loss hasn't improved for {early_stopping_patience} evals.")
+                    print(f"Best val loss: {best_val_loss:.4f}")
+                    break
+
         if wandb_log:
             wandb.log(
                 {
@@ -402,8 +443,11 @@ while True:
                     "mfu": running_mfu * 100,  # convert to percentage
                 }
             )
-        if losses["val"] < best_val_loss or always_save_checkpoint:
+        # 只有真正改善时才更新best_val_loss
+        if losses["val"] < best_val_loss:
             best_val_loss = losses["val"]
+        # 保存checkpoint (可以每次都保存，或只在改善时保存)
+        if losses["val"] <= best_val_loss or always_save_checkpoint:
             if iter_num > 0:
                 checkpoint = {
                     "model": raw_model.state_dict(),
