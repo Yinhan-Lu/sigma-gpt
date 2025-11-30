@@ -206,6 +206,11 @@ loss_history = []  # 保存loss历史
 loss_csv_path = os.path.join(out_dir, "loss_history.csv")
 plot_path = os.path.join(out_dir, "training_curve.png")
 
+# 新实验时清除旧的 loss 记录
+if init_from == "scratch" and os.path.exists(loss_csv_path):
+    os.remove(loss_csv_path)
+    print(f"Removed old loss history: {loss_csv_path}")
+
 # attempt to derive vocab_size from the dataset
 meta_path = os.path.join(data_dir, "meta.pkl")
 meta_vocab_size = None
